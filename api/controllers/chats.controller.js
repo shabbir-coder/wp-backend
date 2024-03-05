@@ -12,8 +12,7 @@ const saveContact = async(req, res)=>{
       const existingContact = await Contact.findOne({
         $or: [
           { name },
-          { ITS },
-          { number }
+          { ITS }
           ]
         });
   
@@ -40,17 +39,24 @@ const saveContact = async(req, res)=>{
 const getContact = async(req, res)=>{
     try {
       let query = {};
-      if (req.query.searchText) {
+      const { page, limit, searchtext} = req.query;
+      if (searchtext) {
         query = {
           $or: [
-            { name: { $regex: new RegExp(req.query.searchText, 'i') } },
-            { ITS: { $regex: new RegExp(req.query.searchText, 'i') } },
-            { number: { $regex: new RegExp(req.query.searchText, 'i') } }
+            { name: { $regex: new RegExp(searchtext, 'i') } },
+            { ITS: { $regex: new RegExp(searchtext, 'i') } },
+            { number: { $regex: new RegExp(searchtext, 'i') } }
           ]
         };
       }
-        const contacts = await Contact.find(query);
-        res.status(200).json({data:contacts});
+      console.log('query', query)
+      const Contacts = await Contact.find(query)
+        .skip((page - 1) * limit)
+        .limit(limit);
+      const count = await Contact.countDocuments(query)
+
+      return res.status(200).json({data: Contacts, total: count});
+
       } catch (error) {
         console.log(error)
         return res.status(500).send({ error: error.message });
@@ -137,6 +143,7 @@ const recieveMessages = async (req, res)=>{
       let remoteId = messageObject.data.data.messages?.[0]?.key.remoteJid.split('@')[0];
       console.log('instance_id', messageObject?.instance_id)
       const senderId = await Contact.findOne({number: remoteId})
+      console.log('senderId', senderId)
       if(!senderId) return res.send({message:'Account not found'})
       const recieverId = await Instance.findOne({instance_id: messageObject.instance_id})
       const newMessage = {
@@ -161,8 +168,8 @@ const recieveMessages = async (req, res)=>{
       let end = new Date();
       end.setHours(23,59,59,999);
 
-      if(['hy','hi','hii','hey','hello','slm','salam','hyy','salaam'].includes(message.toLowerCase())){
-        const response =  await sendMessageFunc({...sendMessageObj,message:'Salam Alaikum'})
+      if(['verify'].includes(message.toLowerCase())){
+        const response =  await sendMessageFunc({...sendMessageObj,message:'Salam Alaikum ! Please Enter your ITS ID'})
         return res.json(response);
 
       }else if(/^\d{8}$/.test(message)){
@@ -186,9 +193,11 @@ const recieveMessages = async (req, res)=>{
                 new: true // Return the modified document rather than the original
               }
             )
-          responseText = 'Apne aaj raat na jaman nu izan araz kare che , Reply yes/no for confirmation'
+          // await sendMessageFunc({...sendMessageObj,message: 'Your ITS verified !  '})
+          // responseText = 'Apne aaj raat na jaman nu izan araz kare che , Reply yes/no for confirmation'
+          responseText = ITSmatched?.name + ' your verification process is successful. No more inputs are needed, If any of your other family members are using the same WhatsApp nos enter individual ITS to verify them. Else thanks for your time.'
         }else{
-          responseText = 'Sorry , your ITS is not registered with us yet !'
+          responseText = 'Incorrect ITS & or Whatsapp Number on Anjuman Najmi Profile'
         }
         const response = await sendMessageFunc({...sendMessageObj,message: responseText})
         return res.json(response);
@@ -214,11 +223,11 @@ const recieveMessages = async (req, res)=>{
         return res.json(response);
 
       }else{
-        return res.send(true)
+        return res.json(true)
 
       }
     }else{
-      return res.send(true)
+      return res.json(true)
 
     }
     // Save the message to the database
@@ -247,8 +256,8 @@ const getReport = async (req, res)=>{
     {$match: { instance_id:req.params.id } },
     {$lookup : {
       from: 'contacts',
-      localField: 'senderId',
-      foreignField: '_id',
+      localField: 'requestedITS',
+      foreignField: 'ITS',
       as: 'contact'
     }},
     {$lookup : {

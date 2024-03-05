@@ -8,7 +8,7 @@ const contactSchema = new mongoose.Schema({
 
 const chatLogs = new mongoose.Schema({
   senderId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'contact' }],
-  requestedITS: { type: Number},
+  requestedITS: { type: String,  ref: 'contact'},
   finalResponse: {type: String},
   instance_id: {type: String}
 }, { timestamps: true }

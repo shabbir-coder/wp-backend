@@ -22,8 +22,11 @@ const setDataSchema = new mongoose.Schema({
 const setSchema = new mongoose.Schema({
   setName: String,
   status: String,
-  instanceStatus: {type:String, default:'pending'},
-  instances: [String],
+  NumberVerifiedMessage: String,
+  ITSverificationMessage: String,
+  ITSverificationFailed: String,
+  AcceptanceMessage: String,
+  RejectionMessage: String,
   setData: [setDataSchema],
   createdBy: String,
   createdAt: { type: Date, default: Date.now },

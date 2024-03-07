@@ -1,6 +1,7 @@
 const SetModel = require('../models/setModel')
-
+const {clearCache} = require('../middlewares/cache')
 // setController.js
+const dataKey = 'activeSet';
 
 exports.addSet = async (req, res) => {
   try {
@@ -8,7 +9,9 @@ exports.addSet = async (req, res) => {
     console.log(req.user)
     newSetData['createdBy']=req.user.userId
     const savedSet = await SetModel.create(newSetData);
-    res.json(savedSet);
+    clearCache(dataKey)
+    return res.json(savedSet);
+
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -40,6 +43,7 @@ exports.updateSet = async (req, res) => {
   try {
     const { id } = req.params;
     const updatedSet = await SetModel.findByIdAndUpdate(id, req.body, { new: true });
+    clearCache(dataKey)
     res.json(updatedSet);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -60,6 +64,7 @@ exports.deleteSet = async (req, res) => {
   try {
     const { id } = req.params;
     await SetModel.findByIdAndDelete(id);
+    clearCache(dataKey)
     res.json({ message: 'Set deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -67,10 +72,20 @@ exports.deleteSet = async (req, res) => {
 };
 
 exports.updateSetStatus = async (req, res) => {
+
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const updatedSet = await SetModel.findByIdAndUpdate(id, { status }, { new: true });
+
+    // Check if the new status is 'active'
+    if (status === 'active') {
+      // Find the currently active set and set it to pending
+      await SetModel.updateMany({ isActive: true }, { $set: {status: 'pending', updatedAt: new Date()  } });
+    }
+
+    // Update the specified set
+    const updatedSet = await SetModel.findByIdAndUpdate(id, { status , updatedAt: new Date()  }, { new: true });
+    clearCache(dataKey)
     res.json(updatedSet);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });

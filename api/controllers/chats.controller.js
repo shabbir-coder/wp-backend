@@ -5,6 +5,9 @@ const {Message, Contact, ChatLogs} = require('../models/chatModel');
 const User = require('../models/user');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const fs = require('fs')
+const { getCachedData } = require('../middlewares/cache');
+
+const dataKey = 'activeSet';
 
 const saveContact = async(req, res)=>{
     try {
@@ -132,6 +135,8 @@ const sendMessages = async (req, res)=>{
 const recieveMessages = async (req, res)=>{
   try {
     const io = getIO();
+    const activeSet = await getCachedData(dataKey)
+    console.log('activeSet', JSON.stringify(activeSet))
     const messageObject = req.body;
     console.log('request')
     if(messageObject.data?.data?.messages?.[0]?.key?.fromMe === true) return res.send()
@@ -169,10 +174,12 @@ const recieveMessages = async (req, res)=>{
       end.setHours(23,59,59,999);
 
       if(['verify'].includes(message.toLowerCase())){
-        const response =  await sendMessageFunc({...sendMessageObj,message:'Salam Alaikum ! Please Enter your ITS ID'})
-        return res.json(response);
+        console.log('verify')
+        const response =  await sendMessageFunc({...sendMessageObj,message: activeSet.NumberVerifiedMessage });
+        return res.send(true)
 
       }else if(/^\d{8}$/.test(message)){
+        console.log('ITS')
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
         if(ITSmatched){
@@ -195,15 +202,16 @@ const recieveMessages = async (req, res)=>{
             )
           // await sendMessageFunc({...sendMessageObj,message: 'Your ITS verified !  '})
           // responseText = 'Apne aaj raat na jaman nu izan araz kare che , Reply yes/no for confirmation'
-          responseText = ITSmatched?.name + ' your verification process is successful. No more inputs are needed, If any of your other family members are using the same WhatsApp nos enter individual ITS to verify them. Else thanks for your time.'
-        }else{
-          responseText = 'Incorrect ITS & or Whatsapp Number on Anjuman Najmi Profile'
+          responseText = activeSet.ITSverificationMessage.replace('${name}', ITSmatched.name );
+        } else {
+          responseText = activeSet.ITSverificationFailed;
         }
-        const response = await sendMessageFunc({...sendMessageObj,message: responseText})
-        return res.json(response);
+        const response = await sendMessageFunc({...sendMessageObj,message: responseText});
+        return res.send(true);
 
-      }else if(['yes','no'].includes(message.toLowerCase())){
-        const response = await sendMessageFunc({...sendMessageObj,message:'Thank you'})
+      }else if(['yes','ok','okay','no'].includes(message.toLowerCase())){
+        console.log('accept')
+        const response = await sendMessageFunc({...sendMessageObj,message:message.toLowerCase()!='no'? activeSet.AcceptanceMessage : activeSet.RejectionMessage })
         await ChatLogs.findOneAndUpdate(  
             {
               senderId: senderId?._id,
@@ -215,19 +223,26 @@ const recieveMessages = async (req, res)=>{
                 finalResponse: message.toLowerCase()
               }
             },
-            {
+            { 
               new: true,
               sort: { updatedAt: -1 }
             }
           )
-        return res.json(response);
+        return res.send(true);
 
-      }else{
-        return res.json(true)
-
+      } else {
+        const reply = processUserMessage(message, activeSet);
+        if(reply) {
+          console.log('other')
+          const reply = processUserMessage(message, activeSet);
+          const response = await sendMessageFunc({...sendMessageObj,message:reply });
+  
+          return res.send(true);
+        }
+        return res.send(true);
       }
     }else{
-      return res.json(true)
+      return res.send(true);
 
     }
     // Save the message to the database
@@ -251,9 +266,40 @@ const sendMessageFunc = async (message)=>{
   return response;
 }
 
+function processUserMessage(message, setConfig) {
+  // Iterate through setData array to find matching keywords
+  console.log(setConfig.setData)
+  for (const data of setConfig.setData) {
+      for (const keyword of data.keywords) {
+          if (message.toLowerCase().includes(keyword.toLowerCase())) {
+              return data.answer.message;
+          }
+      }
+  }
+  return null; // Return default message if no matching keyword is found
+}
+
 const getReport = async (req, res)=>{
+  const { fromDate, toDate } = req.query;
+  
+  if (fromDate && toDate) {
+    startDate = new Date(fromDate);
+    endDate = new Date(toDate);
+}
+
+
+  let dateFilter = {};
+  if (startDate && endDate) { // If both startDate and endDate are defined, add a date range filter
+    dateFilter = {
+        "updatedAt": {
+            $gte: startDate,
+            $lt: endDate
+        }
+    };
+}
+
   let query =[
-    {$match: { instance_id:req.params.id } },
+    {$match: { instance_id:req.params.id ,...dateFilter } },
     {$lookup : {
       from: 'contacts',
       localField: 'requestedITS',

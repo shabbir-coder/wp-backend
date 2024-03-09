@@ -4,12 +4,14 @@ const contactSchema = new mongoose.Schema({
   name: { type: String, required: true },
   ITS: { type: String, required: true },
   number: { type: String, required: true },
+  isVerified : {type: Boolean, default: false},
 });
 
 const chatLogs = new mongoose.Schema({
   senderId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'contact' }],
   requestedITS: { type: String,  ref: 'contact'},
   finalResponse: {type: String},
+  otherMessages : {type: {}},
   instance_id: {type: String}
 }, { timestamps: true }
 );

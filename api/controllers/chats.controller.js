@@ -176,9 +176,11 @@ const recieveMessages = async (req, res)=>{
       if(['verify'].includes(message.toLowerCase())){
         console.log('verify')
         const response =  await sendMessageFunc({...sendMessageObj,message: activeSet.NumberVerifiedMessage });
+        senderId.isVerified = true
+        await senderId.save()
         return res.send(true)
 
-      }else if(/^\d{8}$/.test(message)){
+      }else if( senderId.isVerified && /^\d{8}$/.test(message)){
         console.log('ITS')
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
@@ -192,7 +194,7 @@ const recieveMessages = async (req, res)=>{
               },
               {
                 $set: {
-                  updatedAt: Date.now() // Update updatedAt field only
+                  updatedAt: Date.now()
                 }
               },
               {
@@ -209,7 +211,7 @@ const recieveMessages = async (req, res)=>{
         const response = await sendMessageFunc({...sendMessageObj,message: responseText});
         return res.send(true);
 
-      }else if(['yes','ok','okay','no'].includes(message.toLowerCase())){
+      }else if(senderId.isVerified && ['yes','ok','okay','no'].includes(message.toLowerCase())){
         console.log('accept')
         const response = await sendMessageFunc({...sendMessageObj,message:message.toLowerCase()!='no'? activeSet.AcceptanceMessage : activeSet.RejectionMessage })
         await ChatLogs.findOneAndUpdate(  
@@ -231,11 +233,43 @@ const recieveMessages = async (req, res)=>{
         return res.send(true);
 
       } else {
+        if(!senderId.isVerified) return res.send(true);
         const reply = processUserMessage(message, activeSet);
         if(reply) {
           console.log('other')
           const reply = processUserMessage(message, activeSet);
           const response = await sendMessageFunc({...sendMessageObj,message:reply });
+
+          const latestChatLog = await ChatLogs.findOne(
+            {
+                senderId: senderId?._id,
+                instance_id: messageObject?.instance_id,
+                updatedAt: { $gte: start, $lt: end }
+            }
+        ).sort({ updatedAt: -1 });
+          const messages = Object.values(latestChatLog?.otherMessages || {});
+          const isMessagePresent = messages.includes(message.toLowerCase());
+          if (isMessagePresent) {
+              // If the message is already present, do not update and return
+              return latestChatLog;
+          }
+          let messageCount = latestChatLog?.otherMessages ? Object.keys(latestChatLog.otherMessages).length : 0;
+          messageCount++;
+          const keyName = `FEILD_${messageCount}:`;
+          const updateFields = { $set: { [`otherMessages.${keyName}`]: message.toLowerCase() } };
+
+          await ChatLogs.findOneAndUpdate(
+            {
+                senderId: senderId?._id,
+                instance_id: messageObject?.instance_id,
+                updatedAt: { $gte: start, $lt: end }
+            },
+            updateFields,
+            { 
+                new: true,
+                sort: { updatedAt: -1 }
+            }
+          );
   
           return res.send(true);
         }
@@ -320,9 +354,24 @@ const getReport = async (req, res)=>{
       path: '$contact',
       preserveNullAndEmptyArrays: true
     }},
-    { $addFields: {
-      PhoneNumber: { $toString: '$contact.number' } // Convert to string
-  }},
+    {
+      $addFields: {
+        PhoneNumber: { $toString: "$contact.number" }, // Convert to string
+        location: {
+          $let: {
+            vars: {
+              lastKey: {
+                $arrayElemAt: [
+                  { $objectToArray: "$otherMessages" }, // Convert otherMessages object to array of key-value pairs
+                  { $subtract: [{ $size: { $objectToArray: "$otherMessages" } }, 1] } // Get the index of the last element
+                ]
+              }
+            },
+            in: { $toDouble: "$$lastKey.v" } // Convert the value of the last element to double
+          }
+        }
+      }
+    },
     {
       $project: {
         _id: 0,
@@ -331,11 +380,14 @@ const getReport = async (req, res)=>{
         ITS: '$contact.ITS',
         Time: '$updatedAt',
         Response: '$finalResponse',
-        ReceivedTo: '$instance.name'
+        updatedAt: { $dateToString: { format: "%m %d %Y", date: "$updatedAt" } },
+        location: 1
       }
     }
   ]
   const data = await ChatLogs.aggregate(query);
+  console.log(data)
+  
   const csvWriter = createCsvWriter({
     path: './download.csv',
     header: [
@@ -343,7 +395,8 @@ const getReport = async (req, res)=>{
       { id: 'PhoneNumber', title: 'Phone Number', stringQuote: '"' },
       { id: 'ITS', title: 'ITS' },
       { id: 'Response', title: 'Response' },
-      { id: 'RecievedTo', title: 'Recieved To' },
+      { id: 'updatedAt', title: 'Updated At' },
+      { id: 'location', title: 'Location' },
     ]
   });
 

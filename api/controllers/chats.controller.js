@@ -34,7 +34,7 @@ const saveContact = async(req, res)=>{
         await contact.save();
         return res.status(201).send(contact);
       } catch (error) {
-        console.log(error)
+        // console.log(error)
         return res.status(500).send({ error: error.message });
       }
 }
@@ -52,7 +52,7 @@ const getContact = async(req, res)=>{
           ]
         };
       }
-      console.log('query', query)
+      // console.log('query', query)
       const Contacts = await Contact.find(query)
         .skip((page - 1) * limit)
         .limit(limit);
@@ -61,7 +61,7 @@ const getContact = async(req, res)=>{
       return res.status(200).json({data: Contacts, total: count});
 
       } catch (error) {
-        console.log(error)
+        // console.log(error)
         return res.status(500).send({ error: error.message });
       }
 }
@@ -75,7 +75,7 @@ const updateContacts = async(req, res)=>{
         }
         res.status(200).send(contact);
       } catch (error) {
-        console.log(error)
+        // console.log(error)
         return res.status(500).send({ error: error.message });
       }
 }
@@ -94,7 +94,7 @@ const getMessages = async (req, res)=>{
          }).sort({ createdAt: 1 });
         res.status(200).send(messages);
       } catch (error) {
-        console.log(error)
+        // console.log(error)
         return res.status(500).send({ error: error.message });
       }
 }
@@ -120,7 +120,7 @@ const sendMessages = async (req, res)=>{
 
     const response = await axios.get(`${url}/send`,{params:{...params, instance_id, access_token}})
 
-    console.log('response', response.data)
+    // console.log('response', response.data)
     
     // Emit the message to all clients in the conversation room
     io.emit(instance_id.toString() , newMessage);
@@ -136,19 +136,15 @@ const recieveMessages = async (req, res)=>{
   try {
     const io = getIO();
     const activeSet = await getCachedData(dataKey)
-    console.log('activeSet', JSON.stringify(activeSet))
     const messageObject = req.body;
-    console.log('request')
     if(messageObject.data?.data?.messages?.[0]?.key?.fromMe === true) return res.send()
     if(req.body?.data?.event === "messages.upsert"){
-      console.log(messageObject.data.data.messages?.[0]?.message)
+      // console.log(messageObject.data.data.messages?.[0]?.message)
       let message;
       message = messageObject.data.data.messages?.[0]?.message?.extendedTextMessage?.text || messageObject.data.data.messages?.[0]?.message?.conversation || '';
       
       let remoteId = messageObject.data.data.messages?.[0]?.key.remoteJid.split('@')[0];
-      console.log('instance_id', messageObject?.instance_id)
       const senderId = await Contact.findOne({number: remoteId})
-      console.log('senderId', senderId)
       if(!senderId) return res.send({message:'Account not found'})
       const recieverId = await Instance.findOne({instance_id: messageObject.instance_id})
       const newMessage = {
@@ -159,7 +155,7 @@ const recieveMessages = async (req, res)=>{
         type: 'text'
       }
       const savedMessage = new Message(newMessage);
-      // console.log('savedMessage', savedMessage)
+      console.log('savedMessage', savedMessage)
       await savedMessage.save();
       const sendMessageObj={
         number: remoteId,
@@ -174,14 +170,14 @@ const recieveMessages = async (req, res)=>{
       end.setHours(23,59,59,999);
 
       if(['verify'].includes(message.toLowerCase())){
-        console.log('verify')
+        // console.log('verify')
         const response =  await sendMessageFunc({...sendMessageObj,message: activeSet.NumberVerifiedMessage });
         senderId.isVerified = true
         await senderId.save()
         return res.send(true)
 
       }else if( senderId.isVerified && /^\d{8}$/.test(message)){
-        console.log('ITS')
+        // console.log('ITS')
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
         if(ITSmatched){
@@ -212,7 +208,7 @@ const recieveMessages = async (req, res)=>{
         return res.send(true);
 
       }else if(senderId.isVerified && ['yes','ok','okay','no'].includes(message.toLowerCase())){
-        console.log('accept')
+        // console.log('accept')
         const response = await sendMessageFunc({...sendMessageObj,message:message.toLowerCase()!='no'? activeSet.AcceptanceMessage : activeSet.RejectionMessage })
         await ChatLogs.findOneAndUpdate(  
             {
@@ -236,9 +232,15 @@ const recieveMessages = async (req, res)=>{
         if(!senderId.isVerified) return res.send(true);
         const reply = processUserMessage(message, activeSet);
         if(reply) {
-          console.log('other')
+          // console.log('other')
           const reply = processUserMessage(message, activeSet);
-          const response = await sendMessageFunc({...sendMessageObj,message:reply });
+          if(reply.messageType === '2'){
+            sendMessageObj.type='media',
+            sendMessageObj.media_url=reply?.mediaFile,
+            sendMessageObj.filename = 'image.jpg'
+          }
+          // console.log('reply', reply)
+          const response = await sendMessageFunc({...sendMessageObj,message:reply?.message });
 
           const latestChatLog = await ChatLogs.findOne(
             {
@@ -293,20 +295,20 @@ const recieveMessages = async (req, res)=>{
 const sendMessageFunc = async (message)=>{
   const url = process.env.LOGIN_CB_API
   const access_token = process.env.ACCESS_TOKEN_CB
-  console.log('paramsObj',message)
+  // console.log('paramsObj',message)
   const response = await axios.get(`${url}/send`,{params:{...message,access_token}})
-  // console.log(response)
+  console.log(response)
   // const response = 'message send'
   return response;
 }
 
 function processUserMessage(message, setConfig) {
   // Iterate through setData array to find matching keywords
-  console.log(setConfig.setData)
+  // console.log(setConfig.setData)
   for (const data of setConfig.setData) {
       for (const keyword of data.keywords) {
           if (message.toLowerCase().includes(keyword.toLowerCase())) {
-              return data.answer.message;
+              return data.answer;
           }
       }
   }
@@ -386,7 +388,7 @@ const getReport = async (req, res)=>{
     }
   ]
   const data = await ChatLogs.aggregate(query);
-  console.log(data)
+  // console.log(data)
   
   const csvWriter = createCsvWriter({
     path: './download.csv',

@@ -16,11 +16,13 @@ connectDB(); // Connect to MongoDB
 app.use(cors());
 app.use(bodyParser.json());
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use(express.static(path.join(__dirname, 'dist')));
 
 app.use('/api', routes);
 
-app.get('*', (req, res) => {
+app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist/index.html'));
 });
 

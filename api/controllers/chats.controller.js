@@ -142,7 +142,6 @@ const recieveMessages = async (req, res)=>{
       // console.log(messageObject.data.data.messages?.[0]?.message)
       let message;
       message = messageObject.data.data.messages?.[0]?.message?.extendedTextMessage?.text || messageObject.data.data.messages?.[0]?.message?.conversation || '';
-      console.log("message",message)
       let remoteId = messageObject.data.data.messages?.[0]?.key.remoteJid.split('@')[0];
       const senderId = await Contact.findOne({number: remoteId})
       if(!senderId) return res.send({message:'Account not found'})
@@ -169,7 +168,7 @@ const recieveMessages = async (req, res)=>{
       let end = new Date();
       end.setHours(23,59,59,999);
       console.log(message.toLowerCase())
-      if(['izan'].includes(message.toLowerCase())){
+      if(['izan','izzan','izaan','izann','iizan','iizzan'].includes(message.toLowerCase())){
         console.log('verify')
         const response =  await sendMessageFunc({...sendMessageObj,message: activeSet.NumberVerifiedMessage });
         senderId.isVerified = true

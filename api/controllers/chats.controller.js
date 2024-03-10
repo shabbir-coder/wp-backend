@@ -230,7 +230,8 @@ const recieveMessages = async (req, res)=>{
       } else {
         if(!senderId.isVerified) return res.send(true);
         const reply = processUserMessage(message, activeSet);
-        if(reply) {
+        console.log(reply)
+        if(reply?.message) {
           // console.log('other')
           const reply = processUserMessage(message, activeSet);
           if(reply.messageType === '2'){
@@ -306,7 +307,7 @@ function processUserMessage(message, setConfig) {
   // console.log(setConfig.setData)
   for (const data of setConfig.setData) {
       for (const keyword of data.keywords) {
-          if (message.toLowerCase().includes(keyword.toLowerCase())) {
+          if (keyword.toLowerCase().includes(message.toLowerCase())) {
               return data.answer;
           }
       }

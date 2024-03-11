@@ -227,15 +227,55 @@ const recieveMessages = async (req, res)=>{
           )
         return res.send(true);
 
-      } else if (senderId.isVerified && message.length>1 && message.length<8 && typeof +message === 'number'){
-        console.log('here')
+      } else if (senderId.isVerified && /^\d{2,7}$/.test(message)){
         const response =  await sendMessageFunc({...sendMessageObj,message: 'Incorrect ITS, Please enter valid ITS only' });
-
+        return res.send(true)
       }
       else {
         if(!senderId.isVerified) return res.send(true);
+        
+        const latestChatLog = await ChatLogs.findOne(
+          {
+              senderId: senderId?._id,
+              instance_id: messageObject?.instance_id,
+              updatedAt: { $gte: start, $lt: end }
+          }
+        ).sort({ updatedAt: -1 });
+        const messages = Object.values(latestChatLog?.otherMessages || {});
+        console.log('messages',messages)
+        const isMessagePresent = messages.includes(message.toLowerCase());
+      
+        if(isMessagePresent){
+          const response = await sendMessageFunc({...sendMessageObj,message:'Already registered ! Type cancel/change to update your venue' });
+          return res.send(true)
+        }
+
+        if(['cancel','changes'].includes(message.toLowerCase())){
+          const response =  await sendMessageFunc({...sendMessageObj,message: activeSet?.ITSverificationMessage });
+          const latestChatLog = await ChatLogs.findOne(
+            {
+                senderId: senderId?._id,
+                instance_id: messageObject?.instance_id,
+                updatedAt: { $gte: start, $lt: end }
+            }
+          ).sort({ updatedAt: -1 });
+          let lastKeyToDelete = null;
+          for (const [key, value] of Object.entries(latestChatLog.otherMessages)) {
+            if (!isNaN(value)) {
+              lastKeyToDelete = key;
+            }
+          }
+
+          if (lastKeyToDelete) {
+            const update = { $unset: { [`otherMessages.${lastKeyToDelete}`]: "" } };
+            await ChatLogs.updateOne({ _id: latestChatLog?._id }, update);
+          }
+
+          return res.send(true);
+        }
+        
         const reply = processUserMessage(message, activeSet);
-        console.log(reply)
+        console.log({reply})
         if(reply?.message) {
           // console.log('other')
           const reply = processUserMessage(message, activeSet);
@@ -255,6 +295,7 @@ const recieveMessages = async (req, res)=>{
             }
         ).sort({ updatedAt: -1 });
           const messages = Object.values(latestChatLog?.otherMessages || {});
+          console.log('messages',messages)
           const isMessagePresent = messages.includes(message.toLowerCase());
           if (isMessagePresent) {
               // If the message is already present, do not update and return
@@ -262,8 +303,9 @@ const recieveMessages = async (req, res)=>{
           }
           let messageCount = latestChatLog?.otherMessages ? Object.keys(latestChatLog.otherMessages).length : 0;
           messageCount++;
-          const keyName = `FEILD_${messageCount}:`;
+          const keyName = `FEILD_${messageCount}`;
           const updateFields = { $set: { [`otherMessages.${keyName}`]: message.toLowerCase() } };
+
 
           await ChatLogs.findOneAndUpdate(
             {

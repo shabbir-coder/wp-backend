@@ -227,7 +227,12 @@ const recieveMessages = async (req, res)=>{
           )
         return res.send(true);
 
-      } else {
+      } else if (senderId.isVerified && message.length>1 && message.length<8 && typeof +message === 'number'){
+        console.log('here')
+        const response =  await sendMessageFunc({...sendMessageObj,message: 'Incorrect ITS, Please enter valid ITS only' });
+
+      }
+      else {
         if(!senderId.isVerified) return res.send(true);
         const reply = processUserMessage(message, activeSet);
         console.log(reply)
@@ -286,7 +291,7 @@ const recieveMessages = async (req, res)=>{
     // // Emit the message to all clients in the conversation room
 
   } catch (error) {
-    console.error(error);
+    // console.error(error);
 
     res.status(500).json({ error: 'Internal server error' });
   } 

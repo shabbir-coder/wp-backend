@@ -154,7 +154,6 @@ const recieveMessages = async (req, res)=>{
         type: 'text'
       }
       const savedMessage = new Message(newMessage);
-      console.log('savedMessage', savedMessage)
       await savedMessage.save();
       const sendMessageObj={
         number: remoteId,
@@ -175,7 +174,7 @@ const recieveMessages = async (req, res)=>{
         await senderId.save()
         return res.send(true)
 
-      }else if( senderId.isVerified && /^\d{8}$/.test(message)){
+      } else if ( senderId.isVerified && /^\d{8}$/.test(message)){
         // console.log('ITS')
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
@@ -206,7 +205,7 @@ const recieveMessages = async (req, res)=>{
         const response = await sendMessageFunc({...sendMessageObj,message: responseText});
         return res.send(true);
 
-      }else if(senderId.isVerified && ['yes','ok','okay','no'].includes(message.toLowerCase())){
+      } else if (senderId.isVerified && ['yes','ok','okay','no'].includes(message.toLowerCase())){
         // console.log('accept')
         const response = await sendMessageFunc({...sendMessageObj,message:message.toLowerCase()!='no'? activeSet.AcceptanceMessage : activeSet.RejectionMessage })
         await ChatLogs.findOneAndUpdate(  
@@ -230,10 +229,8 @@ const recieveMessages = async (req, res)=>{
       } else if (senderId.isVerified && /^\d{2,7}$/.test(message)){
         const response =  await sendMessageFunc({...sendMessageObj,message: 'Incorrect ITS, Please enter valid ITS only' });
         return res.send(true)
-      }
-      else {
+      } else {
         if(!senderId.isVerified) return res.send(true);
-        
         const latestChatLog = await ChatLogs.findOne(
           {
               senderId: senderId?._id,
@@ -242,7 +239,6 @@ const recieveMessages = async (req, res)=>{
           }
         ).sort({ updatedAt: -1 });
         const messages = Object.values(latestChatLog?.otherMessages || {});
-        console.log('messages',messages)
         const isMessagePresent = messages.includes(message.toLowerCase());
       
         if(isMessagePresent){
@@ -251,7 +247,7 @@ const recieveMessages = async (req, res)=>{
         }
 
         if(['cancel','changes'].includes(message.toLowerCase())){
-          const response =  await sendMessageFunc({...sendMessageObj,message: activeSet?.ITSverificationMessage });
+
           const latestChatLog = await ChatLogs.findOne(
             {
                 senderId: senderId?._id,
@@ -271,13 +267,19 @@ const recieveMessages = async (req, res)=>{
             await ChatLogs.updateOne({ _id: latestChatLog?._id }, update);
           }
 
+          const ITSmatched = await Contact.findOne({ITS: latestChatLog.requestedITS});
+
+          const response =  await sendMessageFunc({...sendMessageObj,message: activeSet?.ITSverificationMessage.replace('${name}', ITSmatched.name )});
           return res.send(true);
         }
-        
+
+        if(message.toLowerCase().split(' ').some(word => ['burhani','saifee','majma','warqa','masjid','masakin','not','coming','attending'].includes(word))){
+          const response = await sendMessageFunc({...sendMessageObj, message: 'Incorrect input, Please enter valid input only'} );
+          return res.send(true);
+        }
+
         const reply = processUserMessage(message, activeSet);
-        console.log({reply})
         if(reply?.message) {
-          // console.log('other')
           const reply = processUserMessage(message, activeSet);
           if(reply.messageType === '2'){
             sendMessageObj.type='media',
@@ -295,7 +297,6 @@ const recieveMessages = async (req, res)=>{
             }
         ).sort({ updatedAt: -1 });
           const messages = Object.values(latestChatLog?.otherMessages || {});
-          console.log('messages',messages)
           const isMessagePresent = messages.includes(message.toLowerCase());
           if (isMessagePresent) {
               // If the message is already present, do not update and return
@@ -326,14 +327,13 @@ const recieveMessages = async (req, res)=>{
       }
     }else{
       return res.send(true);
-
     }
     // Save the message to the database
 
     // // Emit the message to all clients in the conversation room
 
   } catch (error) {
-    // console.error(error);
+    console.error(error);
 
     res.status(500).json({ error: 'Internal server error' });
   } 

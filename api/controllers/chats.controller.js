@@ -256,7 +256,11 @@ const recieveMessages = async (req, res)=>{
             }
           ).sort({ updatedAt: -1 });
           let lastKeyToDelete = null;
-          for (const [key, value] of Object.entries(latestChatLog.otherMessages)) {
+          if(!latestChatLog){
+            const response =  await sendMessageFunc({...sendMessageObj,message: 'Nothing to cancel' });
+            return res.send(true);
+          }
+          for (const [key, value] of Object.entries(latestChatLog?.otherMessages)) {
             if (!isNaN(value)) {
               lastKeyToDelete = key;
             }
@@ -302,7 +306,7 @@ const recieveMessages = async (req, res)=>{
               // If the message is already present, do not update and return
               return latestChatLog;
           }
-          let messageCount = latestChatLog?.otherMessages ? Object.keys(latestChatLog.otherMessages).length : 0;
+          let messageCount = latestChatLog?.otherMessages ? Object.keys(latestChatLog?.otherMessages).length : 0;
           messageCount++;
           const keyName = `FEILD_${messageCount}`;
           const updateFields = { $set: { [`otherMessages.${keyName}`]: message.toLowerCase() } };

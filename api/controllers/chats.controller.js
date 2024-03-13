@@ -6,6 +6,7 @@ const User = require('../models/user');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const fs = require('fs')
 const { getCachedData } = require('../middlewares/cache');
+const moment = require('moment-timezone');
 
 const dataKey = 'activeSet';
 
@@ -136,11 +137,16 @@ const recieveMessages = async (req, res)=>{
   try {
     const io = getIO();
     const activeSet = await getCachedData(dataKey)
+    console.log('activeSet', activeSet)
     const messageObject = req.body;
     if(messageObject.data?.data?.messages?.[0]?.key?.fromMe === true) return res.send()
     if(["messages.upsert"].includes(req.body?.data?.event)){
       // console.log(messageObject.data.data.messages?.[0]?.message)
       let message;
+      const currentTime = moment().tz('Asia/Dubai');
+      const startingTime = moment(activeSet?.StartingTime).tz('Asia/Dubai');
+      const endingTime = moment(activeSet?.EndingTime).tz('Asia/Dubai');
+
       message = messageObject.data.data.messages?.[0]?.message?.extendedTextMessage?.text || messageObject.data.data.messages?.[0]?.message?.conversation || '';
       let remoteId = messageObject.data.data.messages?.[0]?.key.remoteJid.split('@')[0];
       const senderId = await Contact.findOne({number: remoteId})
@@ -160,6 +166,11 @@ const recieveMessages = async (req, res)=>{
         type: 'text',
         instance_id: messageObject?.instance_id,
       }
+      if (!currentTime.isBetween(startingTime, endingTime)) {
+        const response =  await sendMessageFunc({...sendMessageObj,message: "Registrations are closed now" });
+        return res.send(true);      
+      }
+    
       io.emit(messageObject?.instance_id.toString() , savedMessage);
       let start = new Date();
       start.setHours(0,0,0,0);
@@ -179,6 +190,12 @@ const recieveMessages = async (req, res)=>{
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
         if(ITSmatched){
+          const izanDate = new Date(ITSmatched.lastIzantaken)
+          if( izanDate >= start && izanDate <= end){
+            const response = await sendMessageFunc({...sendMessageObj,message:'Already registered ! Type cancel/change to update your venue' });
+            return res.send(true)
+          }
+
             await ChatLogs.findOneAndUpdate(
               {
                 senderId: senderId?._id,
@@ -240,13 +257,12 @@ const recieveMessages = async (req, res)=>{
         ).sort({ updatedAt: -1 });
         const messages = Object.values(latestChatLog?.otherMessages || {});
         const isMessagePresent = messages.includes(message.toLowerCase());
-      
-        if(isMessagePresent){
+        const izanDate = new Date(senderId.lastIzantaken)
+        if( izanDate >= start && izanDate <= end && !['cancel','change'].includes(message.toLowerCase())){
           const response = await sendMessageFunc({...sendMessageObj,message:'Already registered ! Type cancel/change to update your venue' });
           return res.send(true)
         }
-
-        if(['cancel','changes'].includes(message.toLowerCase())){
+        if(['cancel','change'].includes(message.toLowerCase())){
 
           const latestChatLog = await ChatLogs.findOne(
             {
@@ -272,6 +288,8 @@ const recieveMessages = async (req, res)=>{
           }
 
           const ITSmatched = await Contact.findOne({ITS: latestChatLog.requestedITS});
+          ITSmatched.lastIzantaken=null
+          await ITSmatched.save()
 
           const response =  await sendMessageFunc({...sendMessageObj,message: activeSet?.ITSverificationMessage.replace('${name}', ITSmatched.name )});
           return res.send(true);
@@ -285,14 +303,6 @@ const recieveMessages = async (req, res)=>{
         const reply = processUserMessage(message, activeSet);
         if(reply?.message) {
           const reply = processUserMessage(message, activeSet);
-          if(reply.messageType === '2'){
-            sendMessageObj.type='media',
-            sendMessageObj.media_url=reply?.mediaFile,
-            sendMessageObj.filename = 'image.jpg'
-          }
-          // console.log('reply', reply)
-          const response = await sendMessageFunc({...sendMessageObj,message:reply?.message });
-
           const latestChatLog = await ChatLogs.findOne(
             {
                 senderId: senderId?._id,
@@ -300,6 +310,18 @@ const recieveMessages = async (req, res)=>{
                 updatedAt: { $gte: start, $lt: end }
             }
         ).sort({ updatedAt: -1 });
+          if(reply.messageType === '2'){
+            sendMessageObj.type='media',
+            sendMessageObj.media_url=reply?.mediaFile,
+            sendMessageObj.filename = 'image.jpg'
+            const ITSmatched = await Contact.findOne({ITS: latestChatLog.requestedITS});
+            ITSmatched.lastIzantaken = new Date();
+            ITSmatched.save()
+          }
+          // console.log('reply', reply)
+          const response = await sendMessageFunc({...sendMessageObj,message:reply?.message });
+
+    
           const messages = Object.values(latestChatLog?.otherMessages || {});
           const isMessagePresent = messages.includes(message.toLowerCase());
           if (isMessagePresent) {
@@ -460,6 +482,28 @@ const getReport = async (req, res)=>{
 
   const fileStream = fs.createReadStream('./download.csv');
   fileStream.pipe(res);
+}
+
+function isTimeInRange(startTime, endTime, timezoneOffset = 0) {
+  // Get the current date/time in UTC
+  const nowUtc = new Date();
+  console.log({startTime, endTime})
+  // Convert it to the target timezone
+  const now = new Date(nowUtc.getTime() + timezoneOffset * 60 * 60 * 1000);
+
+  // Parse start and end times as Date objects
+  const start = new Date(startTime);
+  start.setUTCDate(nowUtc.getUTCDate());
+  start.setUTCMonth(nowUtc.getUTCMonth());
+  start.setUTCFullYear(nowUtc.getUTCFullYear());
+
+  const end = new Date(endTime);
+  end.setUTCDate(nowUtc.getUTCDate());
+  end.setUTCMonth(nowUtc.getUTCMonth());
+  end.setUTCFullYear(nowUtc.getUTCFullYear());
+  console.log(now,start,end)
+  // Check if the current time falls within the start and end times
+  return now >= start && now <= end;
 }
 
 module.exports = {

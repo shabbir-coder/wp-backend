@@ -29,6 +29,8 @@ const setSchema = new mongoose.Schema({
   RejectionMessage: String,
   setData: [setDataSchema],
   createdBy: String,
+  StartingTime: { type: Date },
+  EndingTime: { type: Date },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

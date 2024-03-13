@@ -42,6 +42,8 @@ exports.validatekeywords = async(req,res)=>{
 exports.updateSet = async (req, res) => {
   try {
     const { id } = req.params;
+    req.body.StartingTime
+    req.body.EndingTime
     const updatedSet = await SetModel.findByIdAndUpdate(id, req.body, { new: true });
     clearCache(dataKey)
     res.json(updatedSet);

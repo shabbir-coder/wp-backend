@@ -143,9 +143,9 @@ const recieveMessages = async (req, res)=>{
     if(["messages.upsert"].includes(req.body?.data?.event)){
       // console.log(messageObject.data.data.messages?.[0]?.message)
       let message;
-      const currentTime = moment().tz('Asia/Dubai');
-      const startingTime = moment(activeSet?.StartingTime).tz('Asia/Dubai');
-      const endingTime = moment(activeSet?.EndingTime).tz('Asia/Dubai');
+      const currentTime = moment();
+      const startingTime = moment(activeSet?.StartingTime);
+      const endingTime = moment(activeSet?.EndingTime);
 
       message = messageObject.data.data.messages?.[0]?.message?.extendedTextMessage?.text || messageObject.data.data.messages?.[0]?.message?.conversation || '';
       let remoteId = messageObject.data.data.messages?.[0]?.key.remoteJid.split('@')[0];
@@ -296,7 +296,7 @@ const recieveMessages = async (req, res)=>{
         }
 
         if(message.toLowerCase().split(' ').some(word => ['burhani','saifee','majma','warqa','masjid','masakin','not','coming','attending'].includes(word))){
-          const response = await sendMessageFunc({...sendMessageObj, message: 'Incorrect input, Please enter valid input only'} );
+          const response = await sendMessageFunc({...sendMessageObj, message: 'Incorrect input. \nPlease enter corresponding number against each venue option only'} );
           return res.send(true);
         }
 

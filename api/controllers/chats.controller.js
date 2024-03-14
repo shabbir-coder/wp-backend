@@ -150,7 +150,7 @@ const recieveMessages = async (req, res)=>{
       message = messageObject.data.data.messages?.[0]?.message?.extendedTextMessage?.text || messageObject.data.data.messages?.[0]?.message?.conversation || '';
       let remoteId = messageObject.data.data.messages?.[0]?.key.remoteJid.split('@')[0];
       const senderId = await Contact.findOne({number: remoteId})
-      if(!senderId) return res.send({message:'Account not found'})
+      
       const recieverId = await Instance.findOne({instance_id: messageObject.instance_id})
       const newMessage = {
         recieverId : recieverId?._id,
@@ -165,6 +165,10 @@ const recieveMessages = async (req, res)=>{
         number: remoteId,
         type: 'text',
         instance_id: messageObject?.instance_id,
+      }
+      if(!senderId) {
+        const response =  await sendMessageFunc({...sendMessageObj,message: activeSet?.ITSverificationFailed});
+        return res.send({message:'Account not found'})
       }
       if (!currentTime.isBetween(startingTime, endingTime)) {
         const response =  await sendMessageFunc({...sendMessageObj,message: "Registrations are closed now" });
@@ -186,7 +190,6 @@ const recieveMessages = async (req, res)=>{
         return res.send(true)
 
       } else if ( senderId.isVerified && /^\d{8}$/.test(message)){
-        // console.log('ITS')
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
         if(ITSmatched){
@@ -246,6 +249,9 @@ const recieveMessages = async (req, res)=>{
       } else if (senderId.isVerified && /^\d{2,7}$/.test(message)){
         const response =  await sendMessageFunc({...sendMessageObj,message: 'Incorrect ITS, Please enter valid ITS only' });
         return res.send(true)
+      }  else if (senderId.isVerified && (message.match(/\n/g) || []).length !== 0){
+        const response =  await sendMessageFunc({...sendMessageObj,message: 'Invalid Input' });
+        return res.send(true)
       } else {
         if(!senderId.isVerified) return res.send(true);
         const latestChatLog = await ChatLogs.findOne(
@@ -258,6 +264,7 @@ const recieveMessages = async (req, res)=>{
         const messages = Object.values(latestChatLog?.otherMessages || {});
         const isMessagePresent = messages.includes(message.toLowerCase());
         const izanDate = new Date(senderId.lastIzantaken)
+
         if( izanDate >= start && izanDate <= end && !['cancel','change'].includes(message.toLowerCase())){
           const response = await sendMessageFunc({...sendMessageObj,message:'Already registered ! Type cancel/change to update your venue' });
           return res.send(true)

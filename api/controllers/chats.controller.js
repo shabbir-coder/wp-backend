@@ -135,7 +135,7 @@ const sendMessages = async (req, res)=>{
 
 const recieveMessages = async (req, res)=>{
   try {
-    const io = getIO();
+    // const io = getIO();
     const activeSet = await getCachedData(dataKey)
     console.log('activeSet', activeSet)
     const messageObject = req.body;
@@ -175,13 +175,12 @@ const recieveMessages = async (req, res)=>{
         return res.send(true);      
       }
     
-      io.emit(messageObject?.instance_id.toString() , savedMessage);
+      // io.emit(messageObject?.instance_id.toString() , savedMessage);
       let start = new Date();
       start.setHours(0,0,0,0);
 
       let end = new Date();
       end.setHours(23,59,59,999);
-      console.log(message.toLowerCase())
       if(['izan','izzan','izaan','izann','iizan','iizzan'].includes(message.toLowerCase())){
         console.log('verify')
         const response =  await sendMessageFunc({...sendMessageObj,message: activeSet.NumberVerifiedMessage });
@@ -321,10 +320,10 @@ const recieveMessages = async (req, res)=>{
             sendMessageObj.type='media',
             sendMessageObj.media_url=reply?.mediaFile,
             sendMessageObj.filename = 'image.jpg'
-            const ITSmatched = await Contact.findOne({ITS: latestChatLog.requestedITS});
-            ITSmatched.lastIzantaken = new Date();
-            ITSmatched.save()
           }
+          const ITSmatched = await Contact.findOne({ITS: latestChatLog.requestedITS});
+          ITSmatched.lastIzantaken = new Date();
+          ITSmatched.save()
           // console.log('reply', reply)
           const response = await sendMessageFunc({...sendMessageObj,message:reply?.message });
 

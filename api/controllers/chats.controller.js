@@ -248,6 +248,9 @@ const recieveMessages = async (req, res)=>{
       } else if (senderId.isVerified && /^\d{4,7}$/.test(message)){
         const response =  await sendMessageFunc({...sendMessageObj,message: 'Incorrect ITS, Please enter valid ITS only' });
         return res.send(true)
+      } else if (senderId.isVerified && /^\d{2,3}$/.test(message)){
+        const response =  await sendMessageFunc({...sendMessageObj,message: 'Enter only valid choice nos' });
+        return res.send(true)
       }  else if (senderId.isVerified && (message.match(/\n/g) || []).length !== 0){
         const response =  await sendMessageFunc({...sendMessageObj,message: 'Invalid Input' });
         return res.send(true)

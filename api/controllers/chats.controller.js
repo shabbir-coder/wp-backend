@@ -167,7 +167,7 @@ const recieveMessages = async (req, res)=>{
         instance_id: messageObject?.instance_id,
       }
       if(!senderId) {
-        const response =  await sendMessageFunc({...sendMessageObj,message: activeSet?.ITSverificationFailed});
+        const response =  await sendMessageFunc({...sendMessageObj,message: 'Whatsapp Number not found on Anjuman Najmi Profile'});
         return res.send({message:'Account not found'})
       }
       if (!currentTime.isBetween(startingTime, endingTime)) {
@@ -192,11 +192,7 @@ const recieveMessages = async (req, res)=>{
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
         if(ITSmatched){
-          const izanDate = new Date(ITSmatched.lastIzantaken)
-          if( izanDate >= start && izanDate <= end){
-            const response = await sendMessageFunc({...sendMessageObj,message:'Already registered ! Type cancel/change to update your venue' });
-            return res.send(true)
-          }
+          
 
             await ChatLogs.findOneAndUpdate(
               {
@@ -215,6 +211,12 @@ const recieveMessages = async (req, res)=>{
                 new: true // Return the modified document rather than the original
               }
             )
+            const izanDate = new Date(ITSmatched.lastIzantaken)
+            if( izanDate >= start && izanDate <= end){
+              console.log('saving from here')
+              const response = await sendMessageFunc({...sendMessageObj,message:'Already registered ! Type cancel/change to update your venue' });
+              return res.send(true)
+            }
           // await sendMessageFunc({...sendMessageObj,message: 'Your ITS verified !  '})
           // responseText = 'Apne aaj raat na jaman nu izan araz kare che , Reply yes/no for confirmation'
           responseText = activeSet.ITSverificationMessage.replace('${name}', ITSmatched.name );
@@ -264,10 +266,15 @@ const recieveMessages = async (req, res)=>{
           }
         ).sort({ updatedAt: -1 });
         const messages = Object.values(latestChatLog?.otherMessages || {});
-        const isMessagePresent = messages.includes(message.toLowerCase());
-        const izanDate = new Date(senderId.lastIzantaken)
+        const requestedITS = await Contact.findOne({number: remoteId, ITS: latestChatLog?.requestedITS})
+
+        const izanDate = new Date(requestedITS?.lastIzantaken)
 
         if( izanDate >= start && izanDate <= end && !['cancel','change'].includes(message.toLowerCase())){
+          if(!['1','2','3','4','5'].includes(message.toLowerCase())){
+            const response = await sendMessageFunc({...sendMessageObj,message:'Invalid Input' });
+            return res.send(true)    
+          }
           const response = await sendMessageFunc({...sendMessageObj,message:'Already registered ! Type cancel/change to update your venue' });
           return res.send(true)
         }
@@ -290,9 +297,10 @@ const recieveMessages = async (req, res)=>{
               lastKeyToDelete = key;
             }
           }
-
+          
           if (lastKeyToDelete) {
-            const update = { $unset: { [`otherMessages.${lastKeyToDelete}`]: "" } };
+            const update = { $unset: { [`otherMessages.${lastKeyToDelete}`]: "" }, $set: {updatedAt: Date.now() }
+            };
             await ChatLogs.updateOne({ _id: latestChatLog?._id }, update);
           }
 
@@ -310,21 +318,16 @@ const recieveMessages = async (req, res)=>{
         }
 
         const reply = processUserMessage(message, activeSet);
-        if(reply?.message) {
+        
+     
+        if(latestChatLog?.requestedITS && reply?.message) {
           const reply = processUserMessage(message, activeSet);
-          const latestChatLog = await ChatLogs.findOne(
-            {
-                senderId: senderId?._id,
-                instance_id: messageObject?.instance_id,
-                updatedAt: { $gte: start, $lt: end }
-            }
-        ).sort({ updatedAt: -1 });
           if(reply.messageType === '2'){
             sendMessageObj.type='media',
             sendMessageObj.media_url=reply?.mediaFile,
             sendMessageObj.filename = 'image.jpg'
           }
-          const ITSmatched = await Contact.findOne({ITS: latestChatLog.requestedITS});
+          const ITSmatched = await Contact.findOne({ITS: latestChatLog?.requestedITS});
           ITSmatched.lastIzantaken = new Date();
           ITSmatched.save()
           // console.log('reply', reply)
@@ -340,7 +343,7 @@ const recieveMessages = async (req, res)=>{
           let messageCount = latestChatLog?.otherMessages ? Object.keys(latestChatLog?.otherMessages).length : 0;
           messageCount++;
           const keyName = `FEILD_${messageCount}`;
-          const updateFields = { $set: { [`otherMessages.${keyName}`]: message.toLowerCase() } };
+          const updateFields = { $set: { [`otherMessages.${keyName}`]: message.toLowerCase() , updatedAt: Date.now()} };
 
 
           await ChatLogs.findOneAndUpdate(
@@ -358,6 +361,7 @@ const recieveMessages = async (req, res)=>{
   
           return res.send(true);
         }
+        const response = await sendMessageFunc({...sendMessageObj,message:'Invalid Input' });
         return res.send(true);
       }
     }else{
@@ -379,7 +383,6 @@ const sendMessageFunc = async (message)=>{
   const access_token = process.env.ACCESS_TOKEN_CB
   // console.log('paramsObj',message)
   const response = await axios.get(`${url}/send`,{params:{...message,access_token}})
-  console.log(response)
   // const response = 'message send'
   return response;
 }
@@ -387,6 +390,9 @@ const sendMessageFunc = async (message)=>{
 function processUserMessage(message, setConfig) {
   // Iterate through setData array to find matching keywords
   // console.log(setConfig.setData)
+  if (!message) {
+    return null;
+  }
   for (const data of setConfig.setData) {
       for (const keyword of data.keywords) {
           if (keyword.toLowerCase().includes(message.toLowerCase())) {

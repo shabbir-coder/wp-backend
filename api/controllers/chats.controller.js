@@ -245,7 +245,7 @@ const recieveMessages = async (req, res)=>{
           )
         return res.send(true);
 
-      } else if (senderId.isVerified && /^\d{2,7}$/.test(message)){
+      } else if (senderId.isVerified && /^\d{4,7}$/.test(message)){
         const response =  await sendMessageFunc({...sendMessageObj,message: 'Incorrect ITS, Please enter valid ITS only' });
         return res.send(true)
       }  else if (senderId.isVerified && (message.match(/\n/g) || []).length !== 0){

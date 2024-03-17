@@ -312,7 +312,7 @@ const recieveMessages = async (req, res)=>{
           return res.send(true);
         }
 
-        if(message.toLowerCase().split(' ').some(word => ['burhani','saifee','majma','warqa','masjid','masakin','not','coming','attending'].includes(word))){
+        if(!['1','2','3','4','5'].includes(message.toLowerCase())){
           const response = await sendMessageFunc({...sendMessageObj, message: 'Incorrect input. \nPlease enter corresponding number against each venue option only'} );
           return res.send(true);
         }

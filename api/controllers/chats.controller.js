@@ -137,7 +137,6 @@ const recieveMessages = async (req, res)=>{
   try {
     // const io = getIO();
     const activeSet = await getCachedData(dataKey)
-    console.log('activeSet', activeSet)
     const messageObject = req.body;
     if(messageObject.data?.data?.messages?.[0]?.key?.fromMe === true) return res.send()
     if(["messages.upsert"].includes(req.body?.data?.event)){
@@ -166,10 +165,7 @@ const recieveMessages = async (req, res)=>{
         type: 'text',
         instance_id: messageObject?.instance_id,
       }
-      if(!senderId) {
-        const response =  await sendMessageFunc({...sendMessageObj,message: 'Whatsapp Number not found on Anjuman Najmi Profile'});
-        return res.send({message:'Account not found'})
-      }
+      
       if (!currentTime.isBetween(startingTime, endingTime)) {
         const response =  await sendMessageFunc({...sendMessageObj,message: "Registrations are closed now" });
         return res.send(true);      
@@ -181,14 +177,40 @@ const recieveMessages = async (req, res)=>{
 
       let end = new Date();
       end.setHours(23,59,59,999);
+
+      if(['report','reports'].includes(message.toLowerCase()) && senderId?.isAdmin){
+        const reports = await getReportdataByTime(start,end, messageObject?.instance_id)
+        const locationNames = ['Burhani Masjid', 'Saifee Masjid', 'Masakin Warqa', 'Majma', 'Not Attending'];
+
+        const counts = reports.reduce((acc, {location}) => (acc[location] = (acc[location] || 0) + 1, acc), {});
+
+        let reportString = 'Location\t\t\tCounts\n';
+        locationNames.forEach((name, index) => {
+          reportString += `${index + 1}.) ${name}\t= ${counts[index + 1] || 0}\n`;
+        });
+
+        const response =  await sendMessageFunc({...sendMessageObj, message: reportString });
+        return res.send(true);
+      }
+      
+      if(!senderId) {
+        if(['izan','izzan','izaan','izann','iizan','iizzan'].includes(message.toLowerCase())){
+          const response =  await sendMessageFunc({...sendMessageObj,message: 'Whatsapp Number not found on Anjuman Najmi Profile'});
+          return res.send({message:'Account not found'});
+        } else {
+          return res.send({message:'Account not found'});
+        }
+      }
+
       if(['izan','izzan','izaan','izann','iizan','iizzan'].includes(message.toLowerCase())){
         console.log('verify')
+
         const response =  await sendMessageFunc({...sendMessageObj,message: activeSet.NumberVerifiedMessage });
         senderId.isVerified = true
         await senderId.save()
         return res.send(true)
 
-      } else if ( senderId.isVerified && /^\d{8}$/.test(message)){
+      } else if ( senderId?.isVerified && /^\d{8}$/.test(message)){
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
         if(ITSmatched){
@@ -226,26 +248,26 @@ const recieveMessages = async (req, res)=>{
         const response = await sendMessageFunc({...sendMessageObj,message: responseText});
         return res.send(true);
 
-      } else if (senderId.isVerified && ['yes','ok','okay','no'].includes(message.toLowerCase())){
-        // console.log('accept')
-        const response = await sendMessageFunc({...sendMessageObj,message:message.toLowerCase()!='no'? activeSet.AcceptanceMessage : activeSet.RejectionMessage })
-        await ChatLogs.findOneAndUpdate(  
-            {
-              senderId: senderId?._id,
-              instance_id: messageObject?.instance_id,
-              updatedAt: { $gte: start, $lt: end }
-            },
-            {
-              $set: {
-                finalResponse: message.toLowerCase()
-              }
-            },
-            { 
-              new: true,
-              sort: { updatedAt: -1 }
-            }
-          )
-        return res.send(true);
+      // } else if (senderId.isVerified && ['yes','ok','okay','no'].includes(message.toLowerCase())){
+      // // console.log('accept')
+      // const response = await sendMessageFunc({...sendMessageObj,message:message.toLowerCase()!='no'? activeSet.AcceptanceMessage : activeSet.RejectionMessage })
+      // await ChatLogs.findOneAndUpdate(  
+      // {
+      //         senderId: senderId?._id,
+      // instance_id: messageObject?.instance_id,
+      // updatedAt: { $gte: start, $lt: end }
+      // },
+      // {
+      //         $set: {
+      // finalResponse: message.toLowerCase()
+      // }
+      //       },
+      // { 
+      //         new: true,
+      // sort: { updatedAt: -1 }
+      // }
+      //     )
+      //   return res.send(true);
 
       } else if (senderId.isVerified && /^\d{4,7}$/.test(message)){
         const response =  await sendMessageFunc({...sendMessageObj,message: 'Incorrect ITS, Please enter valid ITS only' });
@@ -319,7 +341,6 @@ const recieveMessages = async (req, res)=>{
 
         const reply = processUserMessage(message, activeSet);
         
-     
         if(latestChatLog?.requestedITS && reply?.message) {
           const reply = processUserMessage(message, activeSet);
           if(reply.messageType === '2'){
@@ -333,7 +354,6 @@ const recieveMessages = async (req, res)=>{
           // console.log('reply', reply)
           const response = await sendMessageFunc({...sendMessageObj,message:reply?.message });
 
-    
           const messages = Object.values(latestChatLog?.otherMessages || {});
           const isMessagePresent = messages.includes(message.toLowerCase());
           if (isMessagePresent) {
@@ -344,7 +364,6 @@ const recieveMessages = async (req, res)=>{
           messageCount++;
           const keyName = `FEILD_${messageCount}`;
           const updateFields = { $set: { [`otherMessages.${keyName}`]: message.toLowerCase() , updatedAt: Date.now()} };
-
 
           await ChatLogs.findOneAndUpdate(
             {
@@ -497,6 +516,75 @@ const getReport = async (req, res)=>{
 
   const fileStream = fs.createReadStream('./download.csv');
   fileStream.pipe(res);
+}
+
+async function getReportdataByTime(startDate, endDate, id){
+
+  let dateFilter = {};
+  if (startDate && endDate) { // If both startDate and endDate are defined, add a date range filter
+    dateFilter = {
+        "updatedAt": {
+            $gte: startDate,
+            $lt: endDate
+        }
+    };
+}
+
+  let query =[
+    {$match: { instance_id:id ,...dateFilter } },
+    {$lookup : {
+      from: 'contacts',
+      localField: 'requestedITS',
+      foreignField: 'ITS',
+      as: 'contact'
+    }},
+    {$lookup : {
+      from: 'instances',
+      localField: 'instance_id',
+      foreignField: 'instance_id',
+      as: 'instance'
+    }},
+    {$unwind:{
+      path: '$instance',
+      preserveNullAndEmptyArrays: true
+    }},
+    {$unwind:{
+      path: '$contact',
+      preserveNullAndEmptyArrays: true
+    }},
+    {
+      $addFields: {
+        PhoneNumber: { $toString: "$contact.number" }, // Convert to string
+        location: {
+          $let: {
+            vars: {
+              lastKey: {
+                $arrayElemAt: [
+                  { $objectToArray: "$otherMessages" }, // Convert otherMessages object to array of key-value pairs
+                  { $subtract: [{ $size: { $objectToArray: "$otherMessages" } }, 1] } // Get the index of the last element
+                ]
+              }
+            },
+            in: { $toDouble: "$$lastKey.v" } // Convert the value of the last element to double
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        Name: '$contact.name',
+        PhoneNumber: 1,
+        ITS: '$contact.ITS',
+        Time: '$updatedAt',
+        Response: '$finalResponse',
+        updatedAt: { $dateToString: { format: "%m %d %Y", date: "$updatedAt" } },
+        location: 1
+      }
+    }
+  ]
+  const data = await ChatLogs.aggregate(query);
+  return data ;
 }
 
 function isTimeInRange(startTime, endTime, timezoneOffset = 0) {

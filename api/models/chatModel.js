@@ -5,7 +5,8 @@ const contactSchema = new mongoose.Schema({
   ITS: { type: String, required: true },
   number: { type: String, required: true },
   isVerified : {type: Boolean, default: false},
-  lastIzantaken: {type: Date}
+  lastIzantaken: {type: Date},
+  isAdmin: {type: Boolean, default: false}
 });
 
 const chatLogs = new mongoose.Schema({

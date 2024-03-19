@@ -1,4 +1,5 @@
 const SetModel = require('../models/setModel')
+const File = require('../models/fileModel')
 const {clearCache} = require('../middlewares/cache')
 // setController.js
 const dataKey = 'activeSet';
@@ -104,5 +105,45 @@ exports.getSetsList = async (req, res) => {
     return res.status(200).json({data:sets, total: count});
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+exports.getFile = async (req, res) => {
+  try {
+    const FileData = await File.findById(req.params.id);
+    res.status(200).send({ data: FileData });
+  } catch (error) {
+    res.status(500).send({ message: 'Failed to fetch file', error: error.message });
+  }
+};
+
+exports.listAllFiles = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const sets = await File.find()
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+    const count = await File.countDocuments()
+    return res.status(200).json({data:sets, total: count});
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+exports.uploadFile = async (req, res) => {
+  const { originalname, mimetype, buffer, path } = req.file;
+  const json = req.body.json ? JSON.parse(req.body.json) : []; // Assuming JSON is sent as a stringified array in the form field 'json'
+
+  try {
+    const newFile = new File({
+      filename: originalname,
+      contentType: mimetype,
+      url: path,
+      json: json
+    });
+    await newFile.save();
+    res.status(201).send({ message: 'File uploaded successfully', fileId: newFile._id });
+  } catch (error) {
+    res.status(400).send({ message: 'Failed to upload file', error: error.message });
   }
 };

@@ -213,26 +213,26 @@ const recieveMessages = async (req, res)=>{
       } else if ( senderId?.isVerified && /^\d{8}$/.test(message)){
         const ITSmatched = await Contact.findOne({number: remoteId, ITS:message})
         let responseText= '';
+        const NewChatLog = await ChatLogs.findOneAndUpdate(
+          {
+            senderId: senderId?._id,
+            instance_id: messageObject?.instance_id,
+            requestedITS: message, // Ensure there is a registeredId
+            updatedAt: { $gte: start, $lt: end } // Documents updated today
+          },
+          {
+            $set: {
+              updatedAt: Date.now(),
+              isValid: ITSmatched? true: false
+            }
+          },
+          {
+            upsert: true, // Create if not found, update if found
+            new: true // Return the modified document rather than the original
+          }
+        )
         if(ITSmatched){
-          
-
-            await ChatLogs.findOneAndUpdate(
-              {
-                senderId: senderId?._id,
-                instance_id: messageObject?.instance_id,
-                requestedITS: message, // Ensure there is a registeredId
-                updatedAt: { $gte: start, $lt: end } // Documents updated today
-              },
-              {
-                $set: {
-                  updatedAt: Date.now()
-                }
-              },
-              {
-                upsert: true, // Create if not found, update if found
-                new: true // Return the modified document rather than the original
-              }
-            )
+           
             const izanDate = new Date(ITSmatched.lastIzantaken)
             if( izanDate >= start && izanDate <= end){
               console.log('saving from here')
@@ -287,9 +287,15 @@ const recieveMessages = async (req, res)=>{
               updatedAt: { $gte: start, $lt: end }
           }
         ).sort({ updatedAt: -1 });
+
+        if(!latestChatLog.isValid){
+          const response =  await sendMessageFunc({...sendMessageObj,message: 'Please enter valid ITS first' });
+          return res.send(true);
+        }
+
         const messages = Object.values(latestChatLog?.otherMessages || {});
         const requestedITS = await Contact.findOne({number: remoteId, ITS: latestChatLog?.requestedITS})
-
+          
         const izanDate = new Date(requestedITS?.lastIzantaken)
 
         if( izanDate >= start && izanDate <= end && !['cancel','change'].includes(message.toLowerCase())){
@@ -400,7 +406,6 @@ const recieveMessages = async (req, res)=>{
 const sendMessageFunc = async (message)=>{
   const url = process.env.LOGIN_CB_API
   const access_token = process.env.ACCESS_TOKEN_CB
-  // console.log('paramsObj',message)
   const response = await axios.get(`${url}/send`,{params:{...message,access_token}})
   // const response = 'message send'
   return response;
@@ -429,7 +434,6 @@ const getReport = async (req, res)=>{
     startDate = new Date(fromDate);
     endDate = new Date(toDate);
 }
-
 
   let dateFilter = {};
   if (startDate && endDate) { // If both startDate and endDate are defined, add a date range filter
@@ -528,10 +532,11 @@ async function getReportdataByTime(startDate, endDate, id){
             $lt: endDate
         }
     };
-}
+  }
+
 
   let query =[
-    {$match: { instance_id:id ,...dateFilter } },
+    {$match: { instance_id:id ,...dateFilter, isValid:true } },
     {$lookup : {
       from: 'contacts',
       localField: 'requestedITS',

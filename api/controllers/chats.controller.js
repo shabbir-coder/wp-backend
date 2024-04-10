@@ -167,7 +167,7 @@ const recieveMessages = async (req, res)=>{
       }
       
       if (!currentTime.isBetween(startingTime, endingTime)) {
-        const response =  await sendMessageFunc({...sendMessageObj,message: "Registrations are closed now" });
+        // const response =  await sendMessageFunc({...sendMessageObj,message: "Registrations are closed now" });
         return res.send(true);      
       }
     

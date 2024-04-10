@@ -3,6 +3,7 @@ const File = require('../models/fileModel')
 const {clearCache} = require('../middlewares/cache')
 // setController.js
 const dataKey = 'activeSet';
+const fs = require('fs')
 
 exports.addSet = async (req, res) => {
   try {
@@ -120,10 +121,10 @@ exports.getFile = async (req, res) => {
 exports.listAllFiles = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const sets = await File.find()
+    const sets = await File.find({isDeleted:false})
       .skip((page - 1) * limit)
       .limit(Number(limit));
-    const count = await File.countDocuments()
+    const count = await File.countDocuments({isDeleted:false})
     return res.status(200).json({data:sets, total: count});
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -133,7 +134,7 @@ exports.listAllFiles = async (req, res) => {
 exports.uploadFile = async (req, res) => {
   const { originalname, mimetype, buffer, path } = req.file;
   const json = req.body.json ? JSON.parse(req.body.json) : []; // Assuming JSON is sent as a stringified array in the form field 'json'
-
+  console.log('json', json)
   try {
     const newFile = new File({
       filename: originalname,
@@ -147,3 +148,44 @@ exports.uploadFile = async (req, res) => {
     res.status(400).send({ message: 'Failed to upload file', error: error.message });
   }
 };
+
+exports.deleteFile = async (req, res) => {
+  try {
+    const fileId = req.params.id;
+    const deletedFile = await File.findByIdAndDelete(fileId);
+    if (!deletedFile) {
+      return res.status(404).send({ message: 'File not found' });
+    }
+    fs.unlink(deletedFile.url, (err) => {
+      if (err) {
+        console.error('Error deleting file:', err);
+      } else {
+        console.log('File deleted successfully');
+      }
+    });
+    res.status(200).send({ message: 'File deleted successfully', data: deletedFile });
+  } catch (error) {
+    res.status(500).send({ message: 'Failed to delete file', error: error.message });
+  }
+};
+
+exports.updateFileStatus = async (req, res) => {
+  try {
+    const fileId = req.params.id;
+    const { status } = req.body;
+    
+    if (!status) {
+      return res.status(400).send({ message: 'Status is required' });
+    }
+
+    const updatedFile = await File.findByIdAndUpdate(fileId, { status }, { new: true });
+    if (!updatedFile) {
+      return res.status(404).send({ message: 'File not found' });
+    }
+    
+    res.status(200).send({ message: 'File status updated successfully', data: updatedFile });
+  } catch (error) {
+    res.status(500).send({ message: 'Failed to update file status', error: error.message });
+  }
+};
+

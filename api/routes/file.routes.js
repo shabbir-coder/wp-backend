@@ -20,8 +20,10 @@ const storage = multer.diskStorage({
 
 
 
-router.get('/files',  authenticateToken, cmsController.listAllFiles);
-router.get('/file/:id', authenticateToken, cmsController.getFile);
+router.get('',  authenticateToken, cmsController.listAllFiles);
+router.get('/:id', authenticateToken, cmsController.getFile);
 router.post('/upload', authenticateToken , upload.single('file'), cmsController.uploadFile);
+router.delete('/:id', authenticateToken, cmsController.deleteFile);
+router.post('/:id/status', authenticateToken, cmsController.updateFileStatus);
 
 module.exports = router;
